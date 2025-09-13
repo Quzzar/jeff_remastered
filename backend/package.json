@@ -1,0 +1,21 @@
+{
+	"name": "jeff-backend",
+	"module": "index.ts",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"start": "bun run index.ts",
+		"dev": "bun run --watch index.ts"
+	},
+	"devDependencies": {
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	},
+	"dependencies": {
+		"@socket.io/bun-engine": "^0.0.2",
+		"openai": "^5.20.2",
+		"socket.io": "^4.8.1"
+	}
+}
