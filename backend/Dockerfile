@@ -2,7 +2,7 @@ FROM oven/bun
 
 WORKDIR /usr/src/app
 
-COPY package*.json bun.lockb ./
+COPY package*.json ./
 RUN bun install
 COPY . .
 
