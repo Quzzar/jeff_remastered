@@ -28,7 +28,7 @@ export default function JeffFrame() {
 				</Card.Section>
 
 				<Card.Section className={classes.section}>
-					<Group justify='space-between'>
+					<Group justify='space-between' wrap='nowrap'>
 						<div>
 							<Text fw={500} fz='h4'>
 								Jeff{' '}
