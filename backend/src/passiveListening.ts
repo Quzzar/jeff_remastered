@@ -5,21 +5,21 @@ const openai = new OpenAI({
 	apiKey: process.env.OPENAI_API_KEY,
 });
 
-const TRIGGER_WORDS = ['Jeff', 'Geoff', 'Free'];
+const TRIGGER_WORDS = ['Jeff', 'Geoff'];
 
 export async function handlePassiveListeningAudio(audioChunk: Buffer): Promise<{
 	activate: boolean;
 	transcription: string;
 }> {
 	try {
-		fs.writeFileSync('temp_audio.webm', Buffer.from(audioChunk));
+		fs.writeFileSync('temp_audio.wav', Buffer.from(audioChunk));
 
 		const transcription = await openai.audio.transcriptions.create({
-			file: fs.createReadStream('temp_audio.webm'),
+			file: fs.createReadStream('temp_audio.wav'),
 			model: 'whisper-1',
 		});
 
-		const containsTriggerWord = TRIGGER_WORDS.some((word) => transcription.text.toLowerCase().includes(word.toLowerCase()));
+		const containsTriggerWord = TRIGGER_WORDS.some((word) => transcription.text.includes(word));
 
 		return {
 			activate: containsTriggerWord,

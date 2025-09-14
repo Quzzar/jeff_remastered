@@ -12,7 +12,9 @@
 	"dependencies": {
 		"@mantine/core": "8.3.1",
 		"@mantine/hooks": "8.3.1",
+		"@ricky0123/vad-react": "^0.0.33",
 		"js-yaml": "^4.1.0",
+		"onnxruntime-web": "^1.22.0",
 		"react": "^19.1.1",
 		"react-dom": "^19.1.1",
 		"socket.io-client": "^4.8.1"

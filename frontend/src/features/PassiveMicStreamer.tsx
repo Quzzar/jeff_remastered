@@ -1,73 +1,12 @@
 import { Group, Text, Loader } from '@mantine/core';
-import { usePrevious, useThrottledState } from '@mantine/hooks';
+import { useMicVAD } from '@ricky0123/vad-react';
 import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 export default function PassiveMicStreamer(props: { onActiveMode: (realtimeToken: Record<string, any>, startingText: string) => void }) {
 	const socketRef = useRef<Socket>(null);
 
-	const [jeffState, setJeffState] = useThrottledState<'idle' | 'listening' | 'speaking'>('idle', 800);
-	const previousJeffState = usePrevious(jeffState);
-
-	// Detecting when user is speaking
-	const firstMissingAudioChunkRef = useRef<Blob | null>(null);
-	useEffect(() => {
-		async function init() {
-			const stream = await navigator.mediaDevices.getUserMedia({
-				audio: {
-					noiseSuppression: true,
-					echoCancellation: true,
-					autoGainControl: true,
-				},
-			});
-			const mediaRecorder = new MediaRecorder(stream, {
-				mimeType: 'audio/webm;codecs=opus',
-			});
-
-			// --- Sound detection setup ---
-			const audioCtx = new AudioContext();
-			const source = audioCtx.createMediaStreamSource(stream);
-			const analyser = audioCtx.createAnalyser();
-			const dataArray = new Uint8Array(analyser.frequencyBinCount);
-			source.connect(analyser);
-
-			let isSpeaking = false;
-
-			// Start recording in background
-			mediaRecorder.start(250);
-
-			mediaRecorder.ondataavailable = (event) => {
-				if (event.data.size > 0 && firstMissingAudioChunkRef.current === null) {
-					firstMissingAudioChunkRef.current = event.data;
-				}
-			};
-
-			// Loop to detect sound level
-			const detect = () => {
-				analyser.getByteFrequencyData(dataArray);
-				const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-
-				// tweak threshold depending on mic sensitivity
-
-				isSpeaking = avg > 15;
-
-				if (isSpeaking) {
-					setJeffState('listening');
-				} else {
-					setJeffState('idle');
-				}
-
-				requestAnimationFrame(detect);
-			};
-
-			detect();
-		}
-
-		init();
-	}, []);
-
-	// Reading in the user's mic and sending to server
-	const captureAudioMediaRecorderRef = useRef<MediaRecorder | null>(null);
+	// Establish socket connection
 	useEffect(() => {
 		socketRef.current = io(import.meta.env.VITE_API_URL, {
 			reconnection: true,
@@ -81,50 +20,6 @@ export default function PassiveMicStreamer(props: { onActiveMode: (realtimeToken
 				props.onActiveMode(data.realtimeToken, data.startingText);
 			}
 		});
-
-		async function init() {
-			const stream = await navigator.mediaDevices.getUserMedia({
-				audio: {
-					noiseSuppression: true,
-					echoCancellation: true,
-					autoGainControl: true,
-				},
-			});
-			captureAudioMediaRecorderRef.current = new MediaRecorder(stream, {
-				mimeType: 'audio/webm;codecs=opus',
-			});
-			let audioChunks: Blob[] = [];
-
-			// --- Sound detection setup ---
-			const audioCtx = new AudioContext();
-			const source = audioCtx.createMediaStreamSource(stream);
-			const analyser = audioCtx.createAnalyser();
-			source.connect(analyser);
-
-			captureAudioMediaRecorderRef.current.ondataavailable = (event) => {
-				if (event.data.size > 0) audioChunks.push(event.data);
-			};
-
-			captureAudioMediaRecorderRef.current.onstop = async () => {
-				// TODO: handle firstMissingAudioChunkRef to avoid gaps in audio
-				const fullBlob = new Blob(audioChunks, { type: 'audio/webm' });
-				const arrayBuffer = await fullBlob.arrayBuffer();
-				console.log('Stopping recording, audio chunk:', arrayBuffer.byteLength);
-
-				if (arrayBuffer.byteLength < 6000) {
-					console.warn('[Audio chunk too small, ignoring]');
-				} else if (arrayBuffer.byteLength > 60000) {
-					console.warn('[Audio chunk too large, ignoring]');
-				} else {
-					socket.emit('passive-listening', arrayBuffer);
-				}
-
-				firstMissingAudioChunkRef.current = null;
-				audioChunks = [];
-			};
-		}
-
-		init();
 
 		// Attempt to keep connection alive
 		socket.on('connect', () => console.log('Connected'));
@@ -146,27 +41,39 @@ export default function PassiveMicStreamer(props: { onActiveMode: (realtimeToken
 		};
 	}, []);
 
-	useEffect(() => {
-		if (previousJeffState === 'listening' && jeffState === 'idle') {
-			captureAudioMediaRecorderRef.current?.stop();
-		}
-		if (previousJeffState === 'idle' && jeffState === 'listening') {
-			console.log('Starting recording');
-			console.log('...');
-			captureAudioMediaRecorderRef.current?.start();
-		}
-	}, [jeffState]);
+	// Start speech detection
+	const vad = useMicVAD({
+		onnxWASMBasePath: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/',
+		baseAssetPath: 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.27/dist/',
+		model: 'v5',
+		onSpeechStart: () => {
+			console.log('[Speech start ...');
+		},
+		onSpeechEnd: async (audio) => {
+			const wavBlob = float32ToWavBlob(audio, 16000);
+			const arrayBuffer = await wavBlob.arrayBuffer();
+
+			console.log(`— ${arrayBuffer.byteLength.toLocaleString()} bytes —`);
+
+			if (arrayBuffer.byteLength > 200000) {
+				console.log('⚠️ Audio too long, skipping]');
+			} else {
+				console.log('... Sending audio]');
+				socketRef.current?.emit('passive-listening', arrayBuffer);
+			}
+		},
+	});
 
 	return (
 		<>
-			{jeffState === 'idle' && (
+			{!vad.userSpeaking && (
 				<Group wrap='nowrap' gap={5}>
 					<Text fz='xs' c='dimmed' span>
 						Idle
 					</Text>
 				</Group>
 			)}
-			{jeffState === 'listening' && (
+			{vad.userSpeaking && (
 				<Group wrap='nowrap' gap={5}>
 					<Text fz='xs' c='dimmed' span>
 						Listening
@@ -176,4 +83,38 @@ export default function PassiveMicStreamer(props: { onActiveMode: (realtimeToken
 			)}
 		</>
 	);
+}
+
+function float32ToWavBlob(float32Array: Float32Array, sampleRate = 16000): Blob {
+	const bufferLength = float32Array.length * 2; // 16-bit PCM
+	const buffer = new ArrayBuffer(44 + bufferLength);
+	const view = new DataView(buffer);
+
+	function writeString(view: DataView, offset: number, str: string) {
+		for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+	}
+
+	// WAV header
+	writeString(view, 0, 'RIFF');
+	view.setUint32(4, 36 + bufferLength, true);
+	writeString(view, 8, 'WAVE');
+	writeString(view, 12, 'fmt ');
+	view.setUint32(16, 16, true); // PCM chunk size
+	view.setUint16(20, 1, true); // PCM format
+	view.setUint16(22, 1, true); // channels
+	view.setUint32(24, sampleRate, true);
+	view.setUint32(28, sampleRate * 2, true); // byte rate
+	view.setUint16(32, 2, true); // block align
+	view.setUint16(34, 16, true); // bits per sample
+	writeString(view, 36, 'data');
+	view.setUint32(40, bufferLength, true);
+
+	// PCM samples
+	let offset = 44;
+	for (let i = 0; i < float32Array.length; i++, offset += 2) {
+		let s = Math.max(-1, Math.min(1, float32Array[i]));
+		view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+	}
+
+	return new Blob([view], { type: 'audio/wav' });
 }
