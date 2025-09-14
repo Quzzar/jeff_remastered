@@ -188,7 +188,7 @@ Input: red
 Output: {"x": "0.640", "y": "0.330"}
 
 Input: warm room light
-Output: {"x": "0.4994", "y": "0.4153"}
+Output: {"x": "0.4399", "y": "0.4051"}
 
 
 Input: ${color}
@@ -202,17 +202,28 @@ Input: ${color}
 	if (!response.error) {
 		try {
 			const result = JSON.parse(response.choices[0].message.content);
+
+			const gamut = { x: 0.4399, y: 0.4051 };
 			if (Array.isArray(result)) {
 				// Average the colors
 				const x = result.reduce((acc, c) => acc + c.x, 0) / result.length;
 				const y = result.reduce((acc, c) => acc + c.y, 0) / result.length;
-				return { x, y };
+
+				gamut.x = x;
+				gamut.y = y;
 			} else {
-				return { x: parseFloat(result.x), y: parseFloat(result.y) };
+				gamut.x = parseFloat(result.x);
+				gamut.y = parseFloat(result.y);
 			}
+
+			console.log('Parsed gamut color:', gamut);
+			return gamut;
 		} catch (e) {
 			console.error('Failed to parse color response:', color, e);
 		}
 	}
-	return { x: 0.4994, y: 0.4153 };
+	return {
+		x: 0.4399,
+		y: 0.4051,
+	};
 }
