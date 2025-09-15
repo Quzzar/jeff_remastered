@@ -19,8 +19,6 @@ export default function ActiveMicStreamer(props: { realtimeToken: Record<string,
 		socket.on('active-mode', (data) => {
 			if (!data.enabled) {
 				props.onPassiveMode();
-				// reload the webpage to reset everything
-				window.location.reload();
 			}
 		});
 
@@ -83,6 +81,14 @@ export default function ActiveMicStreamer(props: { realtimeToken: Record<string,
 			});
 		});
 	}, [props.realtimeToken.value]);
+
+	// After 20 minutes, end the session
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			props.onPassiveMode();
+		}, 20 * 60 * 1000); // 20 minutes in ms
+		return () => clearTimeout(timer);
+	}, []);
 
 	return (
 		<Group wrap='nowrap' gap={5}>

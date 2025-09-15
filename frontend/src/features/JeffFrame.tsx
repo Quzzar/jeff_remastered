@@ -5,6 +5,7 @@ import Jeff from '../assets/jeff.png';
 import { useState } from 'react';
 import PassiveMicStreamer from './PassiveMicStreamer';
 import ActiveMicStreamer from './ActiveMicStreamer';
+import { sleep } from '../common/utils/general';
 
 export default function JeffFrame() {
 	const [mode, setMode] = useState<
@@ -51,8 +52,14 @@ export default function JeffFrame() {
 								<ActiveMicStreamer
 									realtimeToken={mode.realtimeToken}
 									startingText={mode.startingText}
-									onPassiveMode={() => {
+									onPassiveMode={async () => {
+										// Let him finish speaking
+										await sleep(2000);
+
 										setMode({ state: 'passive' });
+										// Reload the webpage to reset everything
+										// (fixes issues with RTC convo staying open)
+										window.location.reload();
 									}}
 								/>
 							)}
